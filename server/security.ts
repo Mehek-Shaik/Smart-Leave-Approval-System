@@ -51,6 +51,12 @@ export const Security = {
         return token;
       }
     }
+    if (req.query && typeof req.query.token === 'string') {
+      const queryToken = req.query.token.trim();
+      if (queryToken && queryToken !== 'null' && queryToken !== 'undefined') {
+        return queryToken;
+      }
+    }
     return null;
   },
 

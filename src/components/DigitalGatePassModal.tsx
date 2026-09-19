@@ -17,9 +17,19 @@ import {
   Copy,
   Smartphone,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Download,
+  FileDown,
+  Loader2,
+  Info
 } from 'lucide-react';
 import { LeaveRequest } from '../types';
+import {
+  printGatePassSlip,
+  downloadGatePassPdf,
+  downloadGatePassHtml,
+  openGatePassPrintWindow
+} from '../utils/printGatePass';
 
 export interface DigitalGatePassModalProps {
   leave: LeaveRequest | null;
@@ -36,11 +46,17 @@ export const DigitalGatePassModal: React.FC<DigitalGatePassModalProps> = ({
 }) => {
   const [viewMode, setViewMode] = useState<'slip' | 'screen'>(initialMode);
   const [copiedOtp, setCopiedOtp] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [printStatusNotice, setPrintStatusNotice] = useState<{
+    type: 'info' | 'warning' | 'success';
+    message: string;
+  } | null>(null);
 
   useEffect(() => {
     if (autoPrint && leave) {
       const timer = setTimeout(() => {
-        window.print();
+        handlePrint();
       }, 400);
       return () => clearTimeout(timer);
     }
@@ -51,8 +67,49 @@ export const DigitalGatePassModal: React.FC<DigitalGatePassModalProps> = ({
   const isVerified = leave.securityVerified;
   const isApproved = leave.overallStatus === 'APPROVED';
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    setIsPrinting(true);
+    setPrintStatusNotice(null);
+    setViewMode('slip');
+
+    try {
+      const res = await printGatePassSlip(leave);
+      setIsPrinting(false);
+
+      if (!res.success) {
+        setPrintStatusNotice({
+          type: 'info',
+          message:
+            'Browser print dialog was restricted in this preview frame. Click "Download PDF Pass" or "Open in Full Tab" below to print immediately.',
+        });
+      }
+    } catch (err) {
+      setIsPrinting(false);
+      setPrintStatusNotice({
+        type: 'warning',
+        message: 'Could not trigger print dialog directly. Please use "Download PDF Pass" or "Open in Full Tab".',
+      });
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    setIsDownloadingPdf(true);
+    setPrintStatusNotice(null);
+    try {
+      await downloadGatePassPdf(leave);
+      setPrintStatusNotice({
+        type: 'success',
+        message: 'Gate Pass PDF generated and downloaded successfully.',
+      });
+    } catch (err) {
+      downloadGatePassHtml(leave);
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  const handleOpenInNewTab = () => {
+    openGatePassPrintWindow(leave);
   };
 
   const handleCopyOtp = (code?: string) => {
@@ -97,7 +154,7 @@ export const DigitalGatePassModal: React.FC<DigitalGatePassModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* View Mode Toggle */}
             <div className="flex bg-slate-800 p-0.5 rounded-lg text-xs font-semibold">
               <button
@@ -120,26 +177,77 @@ export const DigitalGatePassModal: React.FC<DigitalGatePassModalProps> = ({
               </button>
             </div>
 
+            {/* Quick Download PDF Button */}
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold border border-slate-700 shadow-xs transition disabled:opacity-50"
+              title="Download High-Resolution Official Gate Pass PDF"
+            >
+              {isDownloadingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-indigo-400" />
+              )}
+              <span className="hidden sm:inline">Download PDF</span>
+            </button>
+
             {/* Quick Print Button */}
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition"
-              title="Print Pass / Save as PDF"
+              disabled={isPrinting}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition disabled:opacity-50"
+              title="Print Pass Directly"
             >
-              <Printer className="w-3.5 h-3.5" />
+              {isPrinting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Printer className="w-3.5 h-3.5" />
+              )}
               <span>Print Pass</span>
             </button>
 
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition ml-1"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
+
+        {/* Informational Notification Banner (e.g. if browser sandbox blocks window.print) */}
+        {printStatusNotice && (
+          <div
+            className={`no-print px-5 py-3 text-xs flex items-center justify-between gap-3 border-b ${
+              printStatusNotice.type === 'success'
+                ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                : 'bg-amber-50 text-amber-900 border-amber-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 flex-shrink-0 text-amber-700" />
+              <span>{printStatusNotice.message}</span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleDownloadPdf}
+                className="px-2.5 py-1 bg-amber-800 text-white hover:bg-amber-900 rounded font-semibold text-[11px] transition"
+              >
+                Download PDF
+              </button>
+              <button
+                onClick={handleOpenInNewTab}
+                className="px-2.5 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-semibold text-[11px] transition flex items-center gap-1"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>Open Tab</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* View Mode 1: SHOW AT GATE (Screen Mode for mobile presentation) */}
         {viewMode === 'screen' && (
@@ -476,30 +584,58 @@ export const DigitalGatePassModal: React.FC<DigitalGatePassModalProps> = ({
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setViewMode(viewMode === 'slip' ? 'screen' : 'slip')}
-              className="px-4 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition flex items-center gap-1.5"
+              className="px-3.5 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition flex items-center gap-1.5"
             >
               {viewMode === 'slip' ? (
                 <>
                   <Smartphone className="w-3.5 h-3.5" />
-                  <span>Show at Gate (Screen View)</span>
+                  <span>Screen View</span>
                 </>
               ) : (
                 <>
                   <Printer className="w-3.5 h-3.5" />
-                  <span>Paper Slip Preview</span>
+                  <span>Paper Slip</span>
                 </>
               )}
             </button>
 
             <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 shadow-md transition"
+              onClick={handleOpenInNewTab}
+              className="px-3 py-2 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl transition flex items-center gap-1.5"
+              title="Open standalone printable slip in a new tab"
             >
-              <Printer className="w-4 h-4 text-emerald-400" />
-              <span>Print Pass / Save PDF</span>
+              <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+              <span>Full Tab</span>
+            </button>
+
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isDownloadingPdf}
+              className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold hover:bg-slate-700 shadow-sm transition disabled:opacity-50"
+              title="Download official PDF pass file"
+            >
+              {isDownloadingPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5 text-indigo-300" />
+              )}
+              <span>Download PDF</span>
+            </button>
+
+            <button
+              onClick={handlePrint}
+              disabled={isPrinting}
+              className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition disabled:opacity-50"
+            >
+              {isPrinting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Printer className="w-4 h-4 text-white" />
+              )}
+              <span>Print Pass</span>
             </button>
           </div>
         </div>

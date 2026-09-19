@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { Database, StudentEntity, MentorEntity, ParentEntity, ClassInchargeEntity, HODEntity, SecurityEntity, AdminEntity, LeaveEntity } from './db.js';
 import { Security, AuthenticatedRequest } from './security.js';
 import { ApprovalService } from './approvalService.js';
-import { generateLeaveHistoryPDF } from './pdfService.js';
+import { generateLeaveHistoryPDF, generateGatePassPDF } from './pdfService.js';
 
 export const apiRouter = Router();
 
@@ -940,4 +940,27 @@ apiRouter.get('/leave/:leaveId', Security.authenticate, (req: AuthenticatedReque
     return res.status(404).json({ error: 'Leave not found' });
   }
   return res.json(leave);
+});
+
+// GET /leaves/:leaveId/pdf and /leaves/:leaveId/pass-pdf - Gate Pass PDF export
+apiRouter.get(['/leaves/:leaveId/pdf', '/leaves/:leaveId/pass-pdf', '/leave/:leaveId/pdf', '/leave/:leaveId/pass-pdf'], (req, res) => {
+  try {
+    const token = Security.extractToken(req);
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Authentication required' });
+    }
+    const user = Security.verifyToken(token);
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Invalid token' });
+    }
+
+    const leave = Database.db.leaves.find(l => l.id === req.params.leaveId);
+    if (!leave) {
+      return res.status(404).json({ error: 'Not Found', message: 'Leave application not found' });
+    }
+
+    generateGatePassPDF(leave, res);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'PDF Generation Error', message: err.message || 'Failed to generate gate pass PDF' });
+  }
 });
