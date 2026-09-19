@@ -1,0 +1,6 @@
+{
+  "name": "Smart Leave Approval System",
+  "description": "Multi-level college leave management and approval workflow system with role-based dashboards, OTP generation, and security gate verification.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
