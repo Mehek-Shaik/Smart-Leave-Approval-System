@@ -6,7 +6,7 @@ import { openApiSpec } from './server/openapi.js';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // JSON Body Parser
   app.use(express.json());
